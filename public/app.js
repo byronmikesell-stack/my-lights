@@ -44,19 +44,19 @@ document.querySelectorAll("[data-command]").forEach(button => {
     const command = button.dataset.command;
     const c = getConfig();
     if (!c.url || !c.token) {
-      setStatus(`${command} selected — not connected`, "The app interface is ready, but Alexa integration has not been configured.");
+      setStatus(command + " selected — not connected", "The app interface is ready, but Alexa integration has not been configured.");
       return;
     }
-    setStatus(`Sending ${command}…`, "Contacting your cloud service.");
+    setStatus("Sending " + command + "…", "Contacting your cloud service.");
     try {
-      const response = await fetch(`${c.url}/api/command`, {
+      const response = await fetch(c.url + "/api/command", {
         method: "POST",
-        headers: {"Content-Type":"application/json","Authorization":`Bearer ${c.token}`},
+        headers: {"Content-Type":"application/json","Authorization":"Bearer " + c.token},
         body: JSON.stringify({command})
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || `Server returned ${response.status}`);
-      setStatus(`${command} request accepted`, result.message || "The cloud service accepted the request.");
+      if (!response.ok) throw new Error(result.error || "Server returned " + response.status);
+      setStatus(command + " request accepted", result.message || "The cloud service accepted the request.");
     } catch (error) {
       setStatus("Could not send command", error.message);
     }
