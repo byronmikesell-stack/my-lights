@@ -6,49 +6,49 @@ This repository contains an installable web app and a Cloudflare Worker that exp
 - **My Lights Blue**
 - **My Lights Off**
 
-Each app button sends a short contact-sensor open/close event to Alexa. You create one Alexa Routine per sensor and choose what that Routine does with your existing Cync lights (and any future Alexa-compatible brands).
+Each app button sends a short contact-sensor open/close event to Alexa. You create one Alexa Routine per sensor and choose what that Routine does with your existing Cync lights (and future Alexa-compatible brands).
 
-## Current state
+## Architecture
 
-- The PWA interface is hosted on Cloudflare Workers.
-- The Worker code now handles Alexa Smart Home discovery and state reports for three virtual contact sensors.
-- The Worker validates Alexa request signatures and request dates.
-- It implements the Alexa Event Gateway authorization-code exchange, token refresh, and ChangeReport events.
-- The buttons remain inactive until the Cloudflare KV binding and secrets are configured, a Smart Home skill is created and linked, and the three Routines are configured.
+- The PWA and primary application backend run on Cloudflare Workers.
+- Cloudflare KV stores Alexa account-link tokens and virtual sensor state.
+- A small AWS Lambda function is the Alexa Smart Home endpoint required by the current Smart Home Developer Console workflow. It only forwards Alexa directives to the Cloudflare Worker over HTTPS.
+- The browser app still calls Cloudflare directly. Lambda is not involved when you tap WHITE, BLUE, or OFF.
 
-## Cloudflare setup required
+The current Alexa Smart Home setup instructions and endpoint configuration use a Lambda ARN. The older generic skill-manifest v0 schema contains broader HTTPS wording, but we are using the documented Smart Home Lambda workflow rather than depending on the conflicting older description. See the official [Smart Home endpoint setup](https://developer.amazon.com/docs/alexaplus/smarthome/configure-endpoint-tutorial) and [Lambda implementation steps](https://developer.amazon.com/docs/alexaplus/smarthome/implement-your-addon).
 
-### 1. Create the KV namespace
+## Cloudflare setup
 
-In the Cloudflare dashboard, create a Workers KV namespace named `my-lights-data`. Then give the namespace a binding name of `MY_LIGHTS_KV` for the `my-lights` Worker. The namespace ID must also be added to `wrangler.jsonc` before future GitHub deployments. Do not put credentials or token values in the namespace ID field.
+### 1. KV namespace
 
-### 2. Add Worker secrets
+Create a Workers KV namespace named `my-lights-data`, then bind it to the `my-lights` Worker using the binding name `MY_LIGHTS_KV`. The namespace ID must also be added to `wrangler.jsonc` before future GitHub deployments. Do not put credentials or token values in the namespace ID field.
 
-In the `my-lights` Worker settings, add these encrypted secrets (not plain text variables):
+### 2. Worker secrets
 
-- `APP_TOKEN` — a long random value used by the web app to authenticate button requests.
-- `ALEXA_SKILL_CLIENT_ID` — the **Alexa Skill Messaging** client ID shown after enabling **Send Alexa Events** in the Alexa Developer Console.
-- `ALEXA_SKILL_CLIENT_SECRET` — the matching **Alexa Skill Messaging** client secret.
+Add these as encrypted Worker secrets, not plain-text variables:
 
-These two Alexa Skill Messaging values are different from the Login with Amazon (LWA) Security Profile credentials used in the Alexa **Account Linking** screen.
+- `APP_TOKEN` — long random value used by the web app to authenticate button requests.
+- `ALEXA_SKILL_CLIENT_ID` — Alexa Skill Messaging client ID shown after enabling **Send Alexa Events**.
+- `ALEXA_SKILL_CLIENT_SECRET` — matching Alexa Skill Messaging client secret.
+- `ALEXA_BRIDGE_SECRET` — long random shared secret used only between Lambda and this Worker.
 
-Never commit secrets to GitHub or paste them into this README.
+The Alexa Skill Messaging values are different from the Login with Amazon (LWA) Security Profile credentials used for Account Linking. Never commit secrets to GitHub or paste them into this README.
 
-## Alexa Developer Console setup
+## AWS Lambda bridge
 
-Create a new **Smart Home** skill/add-on in the Alexa Developer Console. Use English (US) and the Smart Home model.
+Follow the step-by-step instructions in [aws-lambda/README.md](aws-lambda/README.md). The bridge code is in [aws-lambda/index.mjs](aws-lambda/index.mjs). It requires only the built-in Node.js fetch API and has no third-party dependencies.
 
-Configure its Smart Home service endpoint as:
+AWS currently lists an always-free Lambda allowance of 1 million requests and 400,000 GB-seconds per month. A personal lighting controller should use very little of that allowance, but AWS usage is still subject to the account's billing plan and any usage beyond the free limits.
 
-```text
-https://my-lights.byronmikesell.workers.dev/alexa
-```
+## Alexa Developer Console
 
-The current skill manifest schema supports an HTTPS URL for a custom endpoint. Select the trusted-certificate option if the console asks for the HTTPS certificate type. If the console only offers an AWS Lambda ARN for the Smart Home endpoint, stop there; don't create a separate paid service or substitute a random ARN. The endpoint configuration needs to be resolved before the skill can call this Worker.
+Create a **Smart Home** skill/add-on, choose English (US), and copy its Skill ID.
+
+Create the Lambda function, add the Alexa Smart Home trigger using that Skill ID, and paste the function ARN into the Smart Home service endpoint for North America / US. Do not enter the Cloudflare URL directly as the Smart Home endpoint.
 
 ### Account linking
 
-All Smart Home add-ons need account linking. Use Login with Amazon (LWA) as the authorization server:
+Smart Home skills require account linking. Use Login with Amazon (LWA) as the authorization server:
 
 - Authorization URI: `https://www.amazon.com/ap/oa`
 - Access Token URI: `https://api.amazon.com/auth/o2/token`
@@ -82,6 +82,6 @@ After setting `APP_TOKEN` as a Cloudflare Worker secret, open the My Lights app,
 
 - `GET /api/health` reports whether Alexa has been linked.
 - `POST /api/command` accepts WHITE, BLUE, and OFF using the app bearer token.
-- `POST /alexa` receives Alexa Smart Home directives.
+- `POST /alexa-bridge` receives Alexa Smart Home directives from the authenticated Lambda relay.
 
 No Amazon credentials, signing keys, LWA access tokens, or refresh tokens are included in this repository.
