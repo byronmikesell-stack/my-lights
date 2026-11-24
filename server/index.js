@@ -27,4 +27,4 @@ app.post("/api/command", async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, "0.0.0", (0) => console.log(`My Lights listening on ${port}`)));
+app.listen(port, "0.0.0.0", () => console.log(`My Lights listening on ${port}`));
