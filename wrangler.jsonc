@@ -4,6 +4,12 @@
   "main": "src/index.js",
   "compatibility_date": "2026-11-23",
   "workers_dev": true,
+  "kv_namespaces": [
+    {
+      "binding": "MY_LIGHTS_KV",
+      "id": "8355010acbde44939c5d12348dcb9dc1"
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
