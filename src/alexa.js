@@ -1,5 +1,3 @@
-import { SkillRequestSignatureVerifier } from "ask-sdk-express-adapter";
-
 const EVENT_GATEWAY_URL = "https://api.amazonalexa.com/v3/events";
 const LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
 const ACCOUNT_KEY = "alexa:owner";
@@ -10,8 +8,6 @@ const SENSORS = [
   { id: "my-lights-blue", command: "BLUE", name: "My Lights Blue" },
   { id: "my-lights-off", command: "OFF", name: "My Lights Off" }
 ];
-
-const signatureVerifier = new SkillRequestSignatureVerifier();
 
 function newId() {
   return crypto.randomUUID();
@@ -58,6 +54,13 @@ function okJson(data, status = 200) {
 
 function kvReady(env) {
   return Boolean(env.MY_LIGHTS_KV);
+}
+
+function secureEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return mismatch === 0;
 }
 
 async function readAccount(env) {
@@ -305,21 +308,6 @@ function extractMessageId(directive) {
   return directive?.header?.messageId || "";
 }
 
-function verifyDateHeader(request) {
-  const rawDate = request.headers.get("date");
-  if (!rawDate) throw new Error("Alexa Date header is missing.");
-  const parsed = Date.parse(rawDate);
-  if (!Number.isFinite(parsed) || Math.abs(Date.now() - parsed) > 150000) {
-    throw new Error("Alexa request timestamp is outside the allowed 150-second window.");
-  }
-}
-
-async function verifyAlexaRequest(request, rawBody) {
-  const headers = Object.fromEntries(request.headers.entries());
-  await signatureVerifier.verify(rawBody, headers);
-  verifyDateHeader(request);
-}
-
 async function handleAlexaDirective(directive, env) {
   const header = directive?.header || {};
   const namespace = header.namespace;
@@ -395,23 +383,26 @@ async function handleAlexaDirective(directive, env) {
   return alexaError("INVALID_DIRECTIVE", "My Lights does not support this Alexa directive.", messageId);
 }
 
-export async function handleAlexaRequest(request, env) {
+export async function handleAlexaBridgeRequest(request, env) {
   if (request.method !== "POST") {
     return okJson({ error: "Method not allowed" }, 405);
   }
+
+  const expectedSecret = env.ALEXA_BRIDGE_SECRET;
+  if (!expectedSecret) {
+    return okJson({ error: "Alexa bridge secret is not configured." }, 503);
+  }
+  const suppliedSecret = request.headers.get("x-my-lights-bridge-secret") || "";
+  if (!secureEqual(suppliedSecret, expectedSecret)) {
+    return okJson({ error: "Unauthorized bridge request." }, 401);
+  }
+
   if (!kvReady(env)) {
     return okJson({ error: "Cloudflare KV binding MY_LIGHTS_KV is not configured." }, 503);
   }
 
   const rawBody = await request.text();
   if (rawBody.length > 256000) return okJson({ error: "Request body too large." }, 413);
-
-  try {
-    await verifyAlexaRequest(request, rawBody);
-  } catch (error) {
-    console.error("Rejected unsigned or invalid Alexa request:", error.message);
-    return okJson({ error: "Invalid Alexa request signature or timestamp." }, 400);
-  }
 
   let envelope;
   try {
