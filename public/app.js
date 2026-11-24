@@ -20,7 +20,7 @@ $("open-settings").addEventListener("click", () => {
   dialog.showModal();
 });
 $("save-settings").addEventListener("click", () => {
-  const url = $("api-url").value.trim().replace(/\/+$/, "");
+  const url = $("api-url").value.trim().replace(/\\/+$/, "");
   const token = $("api-token").value.trim();
   if (url && !url.startsWith("https://")) {
     setStatus("HTTPS required", "Use a secure https:// backend address.");
@@ -47,12 +47,12 @@ document.querySelectorAll("[data-command]").forEach(button => {
       setStatus(`${command} selected — not connected`, "The app interface is ready, but Alexa integration has not been configured.");
       return;
     }
-    setStatus(`Sending ${command} „, "Contacting your cloud service.");
+    setStatus(`Sending ${command}…`, "Contacting your cloud service.");
     try {
       const response = await fetch(`${c.url}/api/command`, {
         method: "POST",
-        headers: {"Content-Type":"application/json","Authorization":`Bearer ${ctoken}`},
-        body: JSON.stringify({command })
+        headers: {"Content-Type":"application/json","Authorization":`Bearer ${c.token}`},
+        body: JSON.stringify({command})
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || `Server returned ${response.status}`);
