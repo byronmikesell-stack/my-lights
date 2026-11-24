@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>My Lights</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="eyebrow">PERSONAL HOME CONTROL</div>
+      <h1>My Lights</h1>
+      <p class="subtitle">Your lighting, one tap away.</p>
+    </header>
+
+    <section class="status-card" aria-live="polite">
+      <span class="status-dot"></span>
+      <div>
+        <strong id="status-title">Not connected yet</strong>
+        <p id="status-detail">Set up the secure cloud connection when it is ready.</p>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Lighting controls">
+      <button class="control white" data-command="WHITE">
+        <span class="symbol">☀</span><span>WHITE</span>
+      </button>
+      <button class="control blue" data-command="BLUE">
+        <span class="symbol">◒</span><span>BLUE</span>
+      </button>
+      <button class="control off" data-command="OFF">
+        <span class="symbol">⏻</span><span>OFF</span>
+      </button>
+    </section>
+
+    <button class="settings-link" id="open-settings">Connection settings</button>
+    <p class="footnote">Your personal lighting controller</p>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" class="dialog-head">
+      <h2>Connection settings</h2>
+      <button class="close" aria-label="Close">×</button>
+    </form>
+    <label for="api-url">Secure backend URL (HTTPS)</label>
+    <input id="api-url" type="url" placeholder="https://your-service.example">
+    <label for="api-token">App access token</label>
+    <input id="api-token" type="password" placeholder="Enter token supplied during setup" autocomplete="off">
+    <p class="hint">These settings are stored on this device. Do not enter Amazon developer secrets here.</p>
+    <div class="dialog-actions">
+      <button type="button" class="secondary" id="clear-settings">Clear</button>
+      <button type="button" class="save" id="save-settings">Save settings</button>
+    </div>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

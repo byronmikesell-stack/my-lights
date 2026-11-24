@@ -1,0 +1,9 @@
+{
+  "name": "My Lights",
+  "short_name": "My Lights",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101827",
+  "theme_color": "#101827",
+  "description": "Personal smart lighting controller"
+}

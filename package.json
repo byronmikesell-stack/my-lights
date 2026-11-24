@@ -1,0 +1,16 @@
+{
+  "name": "my-lights",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal installable lighting controller starter",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
