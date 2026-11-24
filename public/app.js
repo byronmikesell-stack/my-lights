@@ -5,13 +5,26 @@ const detail = $("status-detail");
 
 function getConfig() {
   return {
-    url: localStorage.getItem("myLightsUrl") || "",
+    url: localStorage.getItem("myLightsUrl") || window.location.origin,
     token: localStorage.getItem("myLightsToken") || ""
   };
 }
 function setStatus(main, sub) {
   title.textContent = main;
   detail.textContent = sub;
+}
+async function refreshAlexaStatus() {
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    const status = await response.json();
+    if (status.alexaConnected) {
+      setStatus("Alexa linked", "Your three My Lights routine triggers are ready.");
+    } else {
+      setStatus("Waiting for Alexa link", "Finish linking the My Lights smart home skill in Alexa to activate the buttons.");
+    }
+  } catch {
+    setStatus("Cloud connection unavailable", "Reload this page to try again.");
+  }
 }
 $("open-settings").addEventListener("click", () => {
   const c = getConfig();
@@ -22,32 +35,32 @@ $("open-settings").addEventListener("click", () => {
 $("save-settings").addEventListener("click", () => {
   const url = $("api-url").value.trim().replace(/\/+$/, "");
   const token = $("api-token").value.trim();
-  if (url && !url.startsWith("https://")) {
+  if (!url.startsWith("https://")) {
     setStatus("HTTPS required", "Use a secure https:// backend address.");
     return;
   }
   localStorage.setItem("myLightsUrl", url);
   localStorage.setItem("myLightsToken", token);
   dialog.close();
-  setStatus(url && token ? "Connection details saved" : "Not connected yet",
-    "The Alexa service still needs to be built and connected.");
+  setStatus(token ? "App access token saved" : "App access token missing",
+    "The app uses the same secure access token configured in Cloudflare.");
 });
 $("clear-settings").addEventListener("click", () => {
   localStorage.removeItem("myLightsUrl");
   localStorage.removeItem("myLightsToken");
-  $("api-url").value = "";
+  $("api-url").value = window.location.origin;
   $("api-token").value = "";
-  setStatus("Not connected yet", "Connection settings cleared.");
+  setStatus("App access cleared", "Enter your Cloudflare app token in Connection settings.");
 });
 document.querySelectorAll("[data-command]").forEach(button => {
   button.addEventListener("click", async () => {
     const command = button.dataset.command;
     const c = getConfig();
-    if (!c.url || !c.token) {
-      setStatus(command + " selected — not connected", "The app interface is ready, but Alexa integration has not been configured.");
+    if (!c.token) {
+      setStatus("App access token needed", "Open Connection settings and enter the APP_TOKEN saved in Cloudflare.");
       return;
     }
-    setStatus("Sending " + command + "…", "Contacting your cloud service.");
+    setStatus("Sending " + command + "…", "Sending a momentary trigger to Alexa.");
     try {
       const response = await fetch(c.url + "/api/command", {
         method: "POST",
@@ -56,7 +69,8 @@ document.querySelectorAll("[data-command]").forEach(button => {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Server returned " + response.status);
-      setStatus(command + " request accepted", result.message || "The cloud service accepted the request.");
+      setStatus(command + " trigger sent", result.message || "Alexa accepted the routine trigger.");
+      window.setTimeout(refreshAlexaStatus, 1200);
     } catch (error) {
       setStatus("Could not send command", error.message);
     }
@@ -65,3 +79,4 @@ document.querySelectorAll("[data-command]").forEach(button => {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
+window.addEventListener("load", refreshAlexaStatus);
