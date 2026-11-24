@@ -1,56 +1,87 @@
-# My Lights — personal lighting controller
+# My Lights — personal Alexa lighting controller
 
-This repository contains the installable web app and a Cloudflare Worker API shell for your personal Alexa lighting project.
+This repository contains an installable web app and a Cloudflare Worker that exposes three virtual Alexa contact sensors:
 
-## What works now
+- **My Lights White**
+- **My Lights Blue**
+- **My Lights Off**
 
-- Responsive WHITE, BLUE, and OFF controls.
-- Installable PWA structure for iPhone Safari ("Add to Home Screen").
-- Cloudflare Worker serves the website and API from one HTTPS origin.
-- The API checks an app bearer token before accepting a lighting command.
-- Health check: `/api/health`.
+Each app button sends a short contact-sensor open/close event to Alexa. You create one Alexa Routine per sensor and choose what that Routine does with your existing Cync lights (and any future Alexa-compatible brands).
 
-## What is not connected yet
+## Current state
 
-The Alexa integration is deliberately **not represented as working**. The command endpoint currently returns HTTP 501 after authentication. No bulb command is sent.
+- The PWA interface is hosted on Cloudflare Workers.
+- The Worker code now handles Alexa Smart Home discovery and state reports for three virtual contact sensors.
+- The Worker validates Alexa request signatures and request dates.
+- It implements the Alexa Event Gateway authorization-code exchange, token refresh, and ChangeReport events.
+- The buttons remain inactive until the Cloudflare KV binding and secrets are configured, a Smart Home skill is created and linked, and the three Routines are configured.
 
-Before implementing the Alexa side, we must prove that the Alexa Smart Home skill virtual contact-sensor approach is accepted as a routine trigger for your actual Alexa account. The actual Alexa skill endpoint must also implement Amazon's required request verification, discovery, account linking/authorization, state reporting, and token handling.
+## Cloudflare setup required
 
-No Amazon credentials, signing keys, or access tokens are included in this repository.
+### 1. Create the KV namespace
 
-## Cloud hosting
+In the Cloudflare dashboard, create a Workers KV namespace named `my-lights-data`. Then give the namespace a binding name of `MY_LIGHTS_KV` for the `my-lights` Worker. The namespace ID must also be added to `wrangler.jsonc` before future GitHub deployments. Do not put credentials or token values in the namespace ID field.
 
-The project is configured for Cloudflare Workers with static assets. Cloudflare Workers Builds can connect to this GitHub repository and deploy on each push to `main`.
+### 2. Add Worker secrets
 
-1. Create/sign into a Cloudflare account and open **Workers & Pages**.
-2. Choose **Create application** and select **GitHub**.
-3. Authorize Cloudflare's GitHub app when asked.
-4. Choose `byronmikesell-stack/my-lights` and branch `main`.
-5. Keep the root directory blank. No build command is required. Use the default deploy command `npx wrangler deploy`.
-6. Save and deploy. Cloudflare provides a `workers.dev` HTTPS address.
+In the `my-lights` Worker settings, add these encrypted secrets (not plain text variables):
 
-The free Workers plan currently includes 100,000 Worker requests per day. Static asset requests are served separately from Worker script requests. Check Cloudflare's current plan and billing screens before enabling any paid feature.
+- `APP_TOKEN` — a long random value used by the web app to authenticate button requests.
+- `ALEXA_SKILL_CLIENT_ID` — the **Alexa Skill Messaging** client ID shown after enabling **Send Alexa Events** in the Alexa Developer Console.
+- `ALEXA_SKILL_CLIENT_SECRET` — the matching **Alexa Skill Messaging** client secret.
 
-## Runtime secret
+These two Alexa Skill Messaging values are different from the Login with Amazon (LWA) Security Profile credentials used in the Alexa **Account Linking** screen.
 
-Before the command endpoint can accept an app request, create a Worker secret named `APP_TOKEN` in the Cloudflare dashboard. Use a long random value. Do not put this value in GitHub or in this README. Enter the same value in the app's Connection settings after deployment.
+Never commit secrets to GitHub or paste them into this README.
 
-The command endpoint still returns HTTP 501 until the Alexa integration is implemented and tested.
+## Alexa Developer Console setup
 
-## Local development (optional)
+Create a new **Smart Home** skill/add-on in the Alexa Developer Console. Use English (US) and the Smart Home model.
 
-Install Node.js, then from the repository root run:
+Configure its Smart Home service endpoint as:
 
-```bash
-npm install
-npm run dev
+```text
+https://my-lights.byronmikesell.workers.dev/alexa
 ```
 
-## iPhone installation (after hosting on HTTPS)
+The current skill manifest schema supports an HTTPS URL for a custom endpoint. Select the trusted-certificate option if the console asks for the HTTPS certificate type. If the console only offers an AWS Lambda ARN for the Smart Home endpoint, stop there; don't create a separate paid service or substitute a random ARN. The endpoint configuration needs to be resolved before the skill can call this Worker.
 
-1. Open the Cloudflare `workers.dev` app URL in Safari.
-2. Tap Share.
-3. Choose **Add to Home Screen**.
-4. Enable **Open as Web App** if offered, then tap Add.
+### Account linking
 
-This is not yet a functioning Alexa controller. It is the hosted app shell and API foundation.
+All Smart Home add-ons need account linking. Use Login with Amazon (LWA) as the authorization server:
+
+- Authorization URI: `https://www.amazon.com/ap/oa`
+- Access Token URI: `https://api.amazon.com/auth/o2/token`
+- Grant type: Authorization Code
+- Scope: `profile:user_id`
+- Client authentication: HTTP Basic
+
+Create an LWA Security Profile, enter its Client ID and Client Secret in the Alexa Account Linking settings, save, and then add the Alexa Redirect URLs shown by the Developer Console to the LWA Security Profile's Allowed Return URLs.
+
+### Send Alexa Events permission
+
+In the Alexa Developer Console, open **Permissions** and enable **Send Alexa Events**. Copy the **Alexa Skill Messaging** Client ID and Client Secret and add them to the Cloudflare Worker secrets listed above. Do not share either value in chat or commit it to GitHub.
+
+After the skill is configured, enable it for Development testing and link it in the Alexa app using the same Amazon account as the Developer Console. Alexa should discover the three virtual contact sensors.
+
+## Configure your Routines
+
+Create three Alexa Routines. For each one, choose its matching My Lights contact sensor as the trigger and use the sensor's **open** event:
+
+- My Lights White opens → run your WHITE lighting actions.
+- My Lights Blue opens → run your BLUE lighting actions.
+- My Lights Off opens → run your OFF lighting actions.
+
+The Worker reports the sensor closing again shortly after the trigger, so each tap acts like a momentary button.
+
+## App access token
+
+After setting `APP_TOKEN` as a Cloudflare Worker secret, open the My Lights app, choose **Connection settings**, and enter the same value as the App access token. The app uses its own Cloudflare Worker URL automatically.
+
+## API behavior
+
+- `GET /api/health` reports whether Alexa has been linked.
+- `POST /api/command` accepts WHITE, BLUE, and OFF using the app bearer token.
+- `POST /alexa` receives Alexa Smart Home directives.
+
+No Amazon credentials, signing keys, LWA access tokens, or refresh tokens are included in this repository.
