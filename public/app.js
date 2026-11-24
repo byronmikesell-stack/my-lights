@@ -20,7 +20,7 @@ $("open-settings").addEventListener("click", () => {
   dialog.showModal();
 });
 $("save-settings").addEventListener("click", () => {
-  const url = $("api-url").value.trim().replace(/\\/+$/, "");
+  const url = $("api-url").value.trim().replace(/\/+$/, "");
   const token = $("api-token").value.trim();
   if (url && !url.startsWith("https://")) {
     setStatus("HTTPS required", "Use a secure https:// backend address.");
