@@ -1,6 +1,6 @@
 # My Lights — personal Alexa lighting controller
 
-This repository contains an installable web app and a Cloudflare Worker that exposes three virtual Alexa contact sensors:
+This repository contains an installable web app and a Cloudflare Worker that exposes virtual Alexa contact sensors (three originals listed below, plus Green, Red, Purple and ten brightness levels; see "Colors and brightness"):
 
 - **My Lights White**
 - **My Lights Blue**
@@ -85,3 +85,13 @@ After setting `APP_TOKEN` as a Cloudflare Worker secret, open the My Lights app,
 - `POST /alexa-bridge` receives Alexa Smart Home directives from the authenticated Lambda relay.
 
 No Amazon credentials, signing keys, LWA access tokens, or refresh tokens are included in this repository.
+
+
+## Colors and brightness
+
+The app also has **BR GREEN**, **BR RED**, **BR PURPLE**, **BR UP** and **BR DN** buttons. After updating, run **Discover Devices** in the Alexa app; it should find 13 new sensors:
+
+- My Lights Green, My Lights Red, My Lights Purple → one routine each that sets the bulb's color. Leave brightness out of these routines.
+- My Lights Level 10, 20, 30 … 100 → one routine each that sets the bulb's brightness to that percent.
+
+UP and DN are handled by the Worker: it remembers the last level in KV (`brightness:level`, starting at 100%) and opens the next level's sensor, stopping at 10% and 100%. If brightness is changed some other way (voice, the Cync app), the next UP/DN steps from the last level the Worker set.
