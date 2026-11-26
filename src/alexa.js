@@ -184,8 +184,8 @@ async function exchangeGrantCode(env, code) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: env.ALEXA_SKILL_CLIENT_ID,
-    client_secret: env.ALEXA_SKILL_CLIENT_SECRET
+    client_id: (env.ALEXA_SKILL_CLIENT_ID || "").trim(),
+    client_secret: (env.ALEXA_SKILL_CLIENT_SECRET || "").trim()
   });
 
   const response = await fetch(LWA_TOKEN_URL, {
@@ -227,8 +227,8 @@ async function refreshGatewayToken(env, account) {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: account.refreshToken,
-    client_id: env.ALEXA_SKILL_CLIENT_ID,
-    client_secret: env.ALEXA_SKILL_CLIENT_SECRET
+    client_id: (env.ALEXA_SKILL_CLIENT_ID || "").trim(),
+    client_secret: (env.ALEXA_SKILL_CLIENT_SECRET || "").trim()
   });
 
   const response = await fetch(LWA_TOKEN_URL, {
