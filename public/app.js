@@ -18,7 +18,7 @@ async function refreshAlexaStatus() {
     const response = await fetch("/api/health", { cache: "no-store" });
     const status = await response.json();
     if (status.alexaConnected) {
-      setStatus("Alexa linked", "Your three My Lights routine triggers are ready.");
+      setStatus("Alexa linked", "Your My Lights routine triggers are ready.");
     } else {
       setStatus("Waiting for Alexa link", "Finish linking the My Lights smart home skill in Alexa to activate the buttons.");
     }
@@ -69,7 +69,7 @@ document.querySelectorAll("[data-command]").forEach(button => {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Server returned " + response.status);
-      setStatus(command + " trigger sent", result.message || "Alexa accepted the routine trigger.");
+      setStatus(result.level ? "Brightness " + result.level + "%" : command + " trigger sent", result.message || "Alexa accepted the routine trigger.");
       window.setTimeout(refreshAlexaStatus, 1200);
     } catch (error) {
       setStatus("Could not send command", error.message);

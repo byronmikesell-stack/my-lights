@@ -3,11 +3,26 @@ const LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
 const ACCOUNT_KEY = "alexa:owner";
 const PULSE_MS = 1800;
 
+const LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const LEVEL_KEY = "brightness:level";
+const DEFAULT_LEVEL = 100;
+
 const SENSORS = [
   { id: "my-lights-white", command: "WHITE", name: "My Lights White" },
   { id: "my-lights-blue", command: "BLUE", name: "My Lights Blue" },
-  { id: "my-lights-off", command: "OFF", name: "My Lights Off" }
+  { id: "my-lights-off", command: "OFF", name: "My Lights Off" },
+  { id: "my-lights-green", command: "GREEN", name: "My Lights Green" },
+  { id: "my-lights-red", command: "RED", name: "My Lights Red" },
+  { id: "my-lights-purple", command: "PURPLE", name: "My Lights Purple" },
+  ...LEVELS.map(level => ({
+    id: `my-lights-level-${level}`,
+    command: `LEVEL_${level}`,
+    name: `My Lights Level ${level}`
+  }))
 ];
+
+// Commands the phone app may send. UP and DN step through the LEVEL_ sensors.
+export const APP_COMMANDS = ["WHITE", "BLUE", "OFF", "GREEN", "RED", "PURPLE", "UP", "DN"];
 
 function newId() {
   return crypto.randomUUID();
@@ -458,6 +473,25 @@ export async function triggerRoutine(env, ctx, command) {
   ctx.waitUntil(reset());
 
   return { ok: true, command, sensor: sensor.name, message: "Alexa routine trigger sent." };
+}
+
+async function readLevel(env) {
+  const stored = Number(await env.MY_LIGHTS_KV.get(LEVEL_KEY));
+  return LEVELS.includes(stored) ? stored : DEFAULT_LEVEL;
+}
+
+// UP/DN move the remembered brightness one 10% step and fire that level's
+// sensor; every other command fires its own sensor directly.
+export async function runAppCommand(env, ctx, command) {
+  if (command !== "UP" && command !== "DN") {
+    return await triggerRoutine(env, ctx, command);
+  }
+  const current = await readLevel(env);
+  const index = LEVELS.indexOf(current) + (command === "UP" ? 1 : -1);
+  const next = LEVELS[Math.min(LEVELS.length - 1, Math.max(0, index))];
+  const result = await triggerRoutine(env, ctx, `LEVEL_${next}`);
+  await env.MY_LIGHTS_KV.put(LEVEL_KEY, String(next));
+  return { ...result, command, level: next, message: `Brightness set to ${next}%.` };
 }
 
 export async function alexaStatus(env) {

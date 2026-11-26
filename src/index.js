@@ -1,4 +1,4 @@
-import { handleAlexaBridgeRequest, triggerRoutine, alexaStatus } from "./alexa.js";
+import { handleAlexaBridgeRequest, runAppCommand, alexaStatus, APP_COMMANDS } from "./alexa.js";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -67,15 +67,15 @@ export default {
       }
 
       const command = body && body.command;
-      if (!["WHITE", "BLUE", "OFF"].includes(command)) {
-        return json({ error: "Command must be WHITE, BLUE, or OFF." }, 400);
+      if (!APP_COMMANDS.includes(command)) {
+        return json({ error: `Command must be one of: ${APP_COMMANDS.join(", ")}.` }, 400);
       }
       if (!env.MY_LIGHTS_KV) {
         return json({ error: "Cloudflare KV storage MY_LIGHTS_KV has not been configured." }, 503);
       }
 
       try {
-        const result = await triggerRoutine(env, ctx, command);
+        const result = await runAppCommand(env, ctx, command);
         return json(result);
       } catch (error) {
         const message = error && error.message ? error.message : "Alexa could not accept the routine trigger.";
