@@ -194,9 +194,27 @@ async function exchangeGrantCode(env, code) {
     body
   });
 
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text();
+  let data = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = {};
+  }
+
   if (!response.ok || !data.access_token || !data.refresh_token) {
-    throw new Error("Amazon did not issue Alexa Event Gateway tokens.");
+    // Log only Amazon's error metadata. Never log the authorization code,
+    // client secret, access token, or refresh token.
+    const diagnostic = {
+      httpStatus: response.status,
+      error: typeof data.error === "string" ? data.error : "unknown_error",
+      errorDescription: typeof data.error_description === "string"
+        ? data.error_description.slice(0, 500)
+        : "No error_description was returned.",
+      responseIsJson: Boolean(responseText && data && Object.keys(data).length)
+    };
+    console.error("Alexa LWA authorization-code exchange failed:", JSON.stringify(diagnostic));
+    throw new Error(`Amazon token exchange failed (HTTP ${response.status}; ${diagnostic.error}).`);
   }
   return data;
 }
