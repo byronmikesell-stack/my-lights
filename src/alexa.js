@@ -253,7 +253,13 @@ async function refreshGatewayToken(env, account) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.access_token) {
-    throw new Error("Amazon could not refresh the Alexa Event Gateway token.");
+    // Amazon's error code only; never log tokens or secrets.
+    console.error("Alexa LWA refresh failed:", JSON.stringify({
+      httpStatus: response.status,
+      error: data.error || null,
+      errorDescription: data.error_description || null
+    }));
+    throw new Error(`Amazon could not refresh the Alexa Event Gateway token (${data.error || "HTTP " + response.status}).`);
   }
 
   const updated = {
@@ -315,6 +321,8 @@ async function sendChangeReport(env, account, sensor, detectionState) {
 
   let response = await send(current.accessToken);
   if (response.status === 401 && current.refreshToken) {
+    const detail = await response.text().catch(() => "");
+    console.error("Alexa Event Gateway returned 401 before refresh:", detail.slice(0, 300));
     current = await refreshGatewayToken(env, current);
     response = await send(current.accessToken);
   }
