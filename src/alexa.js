@@ -492,7 +492,10 @@ async function readLevel(env) {
 // sensor; every other command fires its own sensor directly.
 export async function runAppCommand(env, ctx, command) {
   if (command !== "UP" && command !== "DN") {
-    return await triggerRoutine(env, ctx, command);
+    const result = await triggerRoutine(env, ctx, command);
+    // WHITE's routine also sets the bulb to 100%, so start stepping from there.
+    if (command === "WHITE") await env.MY_LIGHTS_KV.put(LEVEL_KEY, String(DEFAULT_LEVEL));
+    return result;
   }
   const current = await readLevel(env);
   const index = LEVELS.indexOf(current) + (command === "UP" ? 1 : -1);
