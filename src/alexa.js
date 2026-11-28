@@ -3,9 +3,7 @@ const LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
 const ACCOUNT_KEY = "alexa:owner";
 const PULSE_MS = 1800;
 
-const LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-const LEVEL_KEY = "brightness:level";
-const DEFAULT_LEVEL = 100;
+const LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]; // must match src/store.js
 
 const SENSORS = [
   { id: "my-lights-white", command: "WHITE", name: "My Lights White" },
@@ -78,14 +76,34 @@ function secureEqual(a, b) {
   return mismatch === 0;
 }
 
+// Tokens and brightness live in a Durable Object (src/store.js) so reads are
+// never stale and refreshes never overlap.
+function store(env) {
+  if (!env.LIGHTS_STORE) throw new Error("Durable Object binding LIGHTS_STORE is missing.");
+  return env.LIGHTS_STORE.get(env.LIGHTS_STORE.idFromName(ACCOUNT_KEY));
+}
+
 async function readAccount(env) {
-  if (!kvReady(env)) return null;
-  return await env.MY_LIGHTS_KV.get(ACCOUNT_KEY, "json");
+  return await store(env).getAccount();
 }
 
 async function saveAccount(env, account) {
-  if (!kvReady(env)) throw new Error("Cloudflare KV binding MY_LIGHTS_KV is missing.");
-  await env.MY_LIGHTS_KV.put(ACCOUNT_KEY, JSON.stringify(account));
+  await store(env).setAccount(account);
+}
+
+// Alexa's account-linking token changes every hour, so identify the user by
+// their Amazon user_id instead of comparing tokens.
+async function amazonUserId(token) {
+  if (!token) return "";
+  const response = await fetch("https://api.amazon.com/user/profile", {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    console.error("Amazon profile lookup failed:", response.status);
+    return "";
+  }
+  const data = await response.json().catch(() => ({}));
+  return typeof data.user_id === "string" ? data.user_id : "";
 }
 
 function sensorForCommand(command) {
@@ -234,50 +252,9 @@ async function exchangeGrantCode(env, code) {
   return data;
 }
 
-async function refreshGatewayToken(env, account) {
-  if (!account?.refreshToken || !env.ALEXA_SKILL_CLIENT_ID || !env.ALEXA_SKILL_CLIENT_SECRET) {
-    throw new Error("Alexa Event Gateway refresh credentials are unavailable.");
-  }
-
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: account.refreshToken,
-    client_id: (env.ALEXA_SKILL_CLIENT_ID || "").trim(),
-    client_secret: (env.ALEXA_SKILL_CLIENT_SECRET || "").trim()
-  });
-
-  const response = await fetch(LWA_TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    body
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.access_token) {
-    // Amazon's error code only; never log tokens or secrets.
-    console.error("Alexa LWA refresh failed:", JSON.stringify({
-      httpStatus: response.status,
-      error: data.error || null,
-      errorDescription: data.error_description || null
-    }));
-    throw new Error(`Amazon could not refresh the Alexa Event Gateway token (${data.error || "HTTP " + response.status}).`);
-  }
-
-  const updated = {
-    ...account,
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token || account.refreshToken,
-    expiresAt: Date.now() + (Number(data.expires_in) || 3600) * 1000
-  };
-  await saveAccount(env, updated);
-  return updated;
-}
-
 async function currentGatewayAccount(env, account) {
   if (!account?.accessToken) throw new Error("Alexa is not linked yet.");
-  if (!account.expiresAt || Date.now() > account.expiresAt - 60000) {
-    return await refreshGatewayToken(env, account);
-  }
-  return account;
+  return await store(env).freshAccount(false);
 }
 
 async function sendChangeReport(env, account, sensor, detectionState) {
@@ -323,7 +300,7 @@ async function sendChangeReport(env, account, sensor, detectionState) {
   if (response.status === 401 && current.refreshToken) {
     const detail = await response.text().catch(() => "");
     console.error("Alexa Event Gateway returned 401 before refresh:", detail.slice(0, 300));
-    current = await refreshGatewayToken(env, current);
+    current = await store(env).freshAccount(true, current.accessToken);
     response = await send(current.accessToken);
   }
 
@@ -367,7 +344,9 @@ async function handleAlexaDirective(directive, env) {
 
     try {
       const tokens = await exchangeGrantCode(env, code);
+      const userId = await amazonUserId(granteeToken);
       await saveAccount(env, {
+        userId,
         accountLinkToken: granteeToken,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
@@ -392,7 +371,7 @@ async function handleAlexaDirective(directive, env) {
   }
 
   if (namespace === "Alexa.Authorization" && name === "RevokeAuthorization") {
-    if (kvReady(env)) await env.MY_LIGHTS_KV.delete(ACCOUNT_KEY);
+    await store(env).clearAccount();
     return {
       event: {
         header: {
@@ -408,7 +387,12 @@ async function handleAlexaDirective(directive, env) {
 
   const account = await readAccount(env);
   const suppliedToken = extractBearerScope(directive);
-  if (!account?.accountLinkToken || !suppliedToken || suppliedToken !== account.accountLinkToken) {
+  let linked = Boolean(account?.accountLinkToken && suppliedToken);
+  if (linked && suppliedToken !== account.accountLinkToken) {
+    linked = Boolean(account.userId) && (await amazonUserId(suppliedToken)) === account.userId;
+  }
+  if (!linked) {
+    console.error("Alexa directive rejected: not linked to this Alexa account.", namespace, name);
     return alexaError("INVALID_AUTHORIZATION_CREDENTIAL", "My Lights is not linked to this Alexa account.", messageId);
   }
 
@@ -483,22 +467,17 @@ export async function triggerRoutine(env, ctx, command) {
   return { ok: true, command, sensor: sensor.name, message: "Alexa routine trigger sent." };
 }
 
-async function readLevel(env) {
-  const stored = Number(await env.MY_LIGHTS_KV.get(LEVEL_KEY));
-  return LEVELS.includes(stored) ? stored : DEFAULT_LEVEL;
-}
-
 // UP/DN move the remembered brightness one 10% step and fire that level's
 // sensor; every other command fires its own sensor directly.
 export async function runAppCommand(env, ctx, command) {
   if (command !== "UP" && command !== "DN") {
-    return await triggerRoutine(env, ctx, command);
+    const result = await triggerRoutine(env, ctx, command);
+    // WHITE's routine also sets the bulb to 100%, so start stepping from there.
+    if (command === "WHITE") await store(env).resetLevel();
+    return result;
   }
-  const current = await readLevel(env);
-  const index = LEVELS.indexOf(current) + (command === "UP" ? 1 : -1);
-  const next = LEVELS[Math.min(LEVELS.length - 1, Math.max(0, index))];
+  const next = await store(env).stepLevel(command);
   const result = await triggerRoutine(env, ctx, `LEVEL_${next}`);
-  await env.MY_LIGHTS_KV.put(LEVEL_KEY, String(next));
   return { ...result, command, level: next, message: `Brightness set to ${next}%.` };
 }
 

@@ -13,6 +13,14 @@
       "id": "8355010acbde44939c5d12348dcb9dc1"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "LIGHTS_STORE", "class_name": "LightsStore" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LightsStore"] }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
