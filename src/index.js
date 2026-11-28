@@ -1,4 +1,5 @@
 import { handleAlexaBridgeRequest, runAppCommand, alexaStatus, APP_COMMANDS } from "./alexa.js";
+export { LightsStore } from "./store.js";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
