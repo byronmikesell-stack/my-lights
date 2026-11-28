@@ -1,5 +1,5 @@
 // Network first, so app updates appear right away; the cache is only an offline fallback.
-const CACHE = "my-lights-shell-v3";
+const CACHE = "my-lights-shell-v4";
 const FILES = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest"];
 self.addEventListener("install", event => {
   self.skipWaiting();
