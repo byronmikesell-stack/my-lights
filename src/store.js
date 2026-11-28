@@ -60,6 +60,11 @@ export class LightsStore extends DurableObject {
     });
   }
 
+  async getLevel() {
+    const stored = await this.ctx.storage.get("level");
+    return LEVELS.includes(stored) ? stored : DEFAULT_LEVEL;
+  }
+
   async resetLevel() {
     return this.serial(() => this.ctx.storage.put("level", DEFAULT_LEVEL));
   }

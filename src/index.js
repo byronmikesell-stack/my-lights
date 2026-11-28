@@ -41,6 +41,7 @@ export default {
         service: "my-lights",
         platform: "cloudflare-workers",
         alexaConnected: status.linked,
+        level: status.level,
         sensors: status.sensorCount
       });
     }

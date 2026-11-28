@@ -483,8 +483,10 @@ export async function runAppCommand(env, ctx, command) {
 
 export async function alexaStatus(env) {
   const account = await readAccount(env);
+  const level = await store(env).getLevel().catch(() => null);
   return {
     linked: Boolean(account?.accountLinkToken && account?.refreshToken),
+    level,
     sensorCount: SENSORS.length,
     sensors: SENSORS.map(sensor => ({ id: sensor.id, name: sensor.name }))
   };
